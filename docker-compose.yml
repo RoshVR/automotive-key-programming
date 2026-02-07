@@ -79,7 +79,7 @@ services:
 
   # Chatwoot
   chatwoot-postgres:
-    image: postgres:14-alpine
+    image: pgvector/pgvector:pg14
     container_name: chatwoot-postgres
     environment:
       - POSTGRES_DB=chatwoot_production
@@ -103,6 +103,7 @@ services:
   chatwoot:
     image: chatwoot/chatwoot:latest
     container_name: chatwoot
+    command: bundle exec rails server -b 0.0.0.0 -p 3000
     ports:
       - "3001:3000"
     environment:
@@ -113,22 +114,108 @@ services:
       - POSTGRES_USERNAME=postgres
       - POSTGRES_PASSWORD=${DB_PASSWORD}
       - REDIS_URL=redis://chatwoot-redis:6379
-      - FRONTEND_URL=https://${CHATWOOT_HOST}
-      - FORCE_SSL=true
+      - FRONTEND_URL=http://${CHATWOOT_HOST}
+      - FORCE_SSL=false
+      - RAILS_LOG_TO_STDOUT=true
+      - USE_INBOX_AVATAR_FOR_BOT=true
+      - ACTIVE_STORAGE_SERVICE=local
+      - REDIS_OPENSSL_VERIFY_MODE=none
+      - ENABLE_WEBHOOK_VERIFICATION=false
+      - ALLOWED_WEBHOOK_URLS=http://172.18.0.2:5678,http://localhost:5678,http://n8n:5678
+      # SMTP Configuration (opcional)
+      - SMTP_DOMAIN=${SMTP_DOMAIN}
+      - SMTP_ADDRESS=${SMTP_ADDRESS}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_USERNAME=${SMTP_USERNAME}
+      - SMTP_PASSWORD=${SMTP_PASSWORD}
+      - SMTP_ENABLE_STARTTLS_AUTO=${SMTP_ENABLE_STARTTLS_AUTO}
+      - SMTP_AUTHENTICATION=${SMTP_AUTHENTICATION}
+      - MAILER_SENDER_EMAIL=${SMTP_USERNAME}
     depends_on:
-      - chatwoot-postgres
-      - chatwoot-redis
+      chatwoot-postgres:
+        condition: service_started
+      chatwoot-redis:
+        condition: service_started
+    volumes:
+      - chatwoot_storage:/app/storage
     restart: unless-stopped
     networks:
       - app-network
+
+  chatwoot-sidekiq:
+    image: chatwoot/chatwoot:latest
+    container_name: chatwoot-sidekiq
+    command: bundle exec sidekiq -C config/sidekiq.yml
+    environment:
+      - RAILS_ENV=production
+      - SECRET_KEY_BASE=${CHATWOOT_SECRET_KEY_BASE}
+      - POSTGRES_HOST=chatwoot-postgres
+      - POSTGRES_DATABASE=chatwoot_production
+      - POSTGRES_USERNAME=postgres
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - REDIS_URL=redis://chatwoot-redis:6379
+      - REDIS_OPENSSL_VERIFY_MODE=none
+    depends_on:
+      - chatwoot-postgres
+      - chatwoot-redis
+      - chatwoot
+    volumes:
+      - chatwoot_storage:/app/storage
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # PostgreSQL para N8N Workflow (memoria de conversaciones)
+  n8n-postgres:
+    image: postgres:14-alpine
+    container_name: n8n-workflow-postgres
+    environment:
+      - POSTGRES_DB=n8n_workflow
+      - POSTGRES_USER=n8n_user
+      - POSTGRES_PASSWORD=${N8N_DB_PASSWORD}
+    volumes:
+      - n8n_postgres_data:/var/lib/postgresql/data
+      - ./migrations/n8n-init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U n8n_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # Redis para N8N Workflow (gestión de mensajes)
+  n8n-redis:
+    image: redis:7-alpine
+    container_name: n8n-workflow-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - n8n_redis_data:/data
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # Faster-Whisper (Transcripción de Audio)
+  faster-whisper:
+    image: fedirz/faster-whisper-server:latest-cpu
+    container_name: faster-whisper-server
+    ports:
+      - "8000:8000"
+    environment:
+      - WHISPER_MODEL=tiny
+      - WHISPER_IMPLEMENTATION=faster-whisper
+    networks:
+      - app-network
+    restart: unless-stopped
 
   # Nginx Reverse Proxy
   nginx:
     image: nginx:alpine
     container_name: automotive-keys-nginx
     ports:
-      - "80:80"
-      - "443:443"
+      - "8080:80"
+      - "8443:443"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
@@ -146,8 +233,11 @@ volumes:
   postgres_data:
   redis_data:
   n8n_data:
+  n8n_postgres_data:
+  n8n_redis_data:
   chatwoot_postgres_data:
   chatwoot_redis_data:
+  chatwoot_storage:
 
 networks:
   app-network:

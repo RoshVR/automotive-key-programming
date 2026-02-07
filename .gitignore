@@ -14,3 +14,8 @@ coverage/
 *.swo
 *~
 .cache/
+.env.*
+.agents/
+.claude/
+ssl/
+ngrok/

@@ -1,0 +1,199 @@
+{
+  "name": "Chatwoot to AI Agent Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "chatwoot-webhook",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-node",
+      "name": "Chatwoot Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.body.message_type}}",
+              "operation": "equals",
+              "value2": "incoming"
+            }
+          ]
+        }
+      },
+      "id": "filter-incoming",
+      "name": "Filter Incoming Messages",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extraer información del mensaje\nconst webhookData = $input.item.json.body;\n\n// Limpiar contenido HTML\nconst cleanContent = webhookData.content\n  .replace(/<[^>]*>/g, '') // Remover tags HTML\n  .replace(/\\n/g, ' ')      // Remover saltos de línea\n  .trim();                  // Remover espacios\n\nconst processedData = {\n  conversationId: webhookData.conversation?.id,\n  messageId: webhookData.id,\n  content: cleanContent,\n  senderName: webhookData.sender?.name,\n  senderEmail: webhookData.sender?.email,\n  inboxId: webhookData.inbox?.id,\n  accountId: webhookData.account?.id,\n  timestamp: webhookData.created_at,\n  // Datos para contexto del agente\n  customerContext: {\n    previousMessages: webhookData.conversation?.messages || [],\n    customerAttributes: webhookData.conversation?.contact_inbox?.custom_attributes || {},\n    browserInfo: webhookData.conversation?.additional_attributes?.browser || {}\n  }\n};\n\nreturn processedData;"
+      },
+      "id": "process-message",
+      "name": "Process Message Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://ollama-server:11434/api/generate",
+        "authentication": "none",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "llama3"
+            },
+            {
+              "name": "prompt",
+              "value": "=Eres un asistente experto para un servicio de programación de llaves automotrices. Responde de manera profesional, amigable y útil.\n\nINFORMACIÓN DEL SERVICIO:\n- Programamos llaves para TODAS las marcas\n- Servicio a domicilio disponible\n- Tiempo promedio: 30-45 minutos\n- Garantía de 1 año\n- Precio desde $150 USD\n\nHORARIOS:\n- Lunes a Viernes: 8:00 AM - 8:00 PM\n- Sábados: 9:00 AM - 6:00 PM\n- Domingos: 10:00 AM - 4:00 PM\n\nCliente pregunta: {{$json.content}}\n\nContexto del cliente:\n- Nombre: {{$json.senderName}}\n- Conversación ID: {{$json.conversationId}}\n\nResponde de manera concisa y profesional en español:"
+            },
+            {
+              "name": "stream",
+              "value": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ai-agent-ollama",
+      "name": "AI Agent (Ollama)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [850, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extraer la respuesta del modelo\nconst response = $input.item.json.response;\n\nreturn {\n  aiResponse: response,\n  conversationId: $input.item.json.conversationId,\n  messageId: $input.item.json.messageId\n};"
+      },
+      "id": "extract-response",
+      "name": "Extract AI Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1050, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://chatwoot:3000/api/v1/accounts/{{$json.accountId}}/conversations/{{$json.conversationId}}/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "content",
+              "value": "={{$json.aiResponse}}"
+            },
+            {
+              "name": "message_type",
+              "value": "outgoing"
+            },
+            {
+              "name": "private",
+              "value": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "send-to-chatwoot",
+      "name": "Send Response to Chatwoot",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1250, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "options": {}
+      },
+      "id": "respond-webhook",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1450, 200]
+    }
+  ],
+  "connections": {
+    "Chatwoot Webhook": {
+      "main": [
+        [
+          {
+            "node": "Filter Incoming Messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Incoming Messages": {
+      "main": [
+        [
+          {
+            "node": "Process Message Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Message Data": {
+      "main": [
+        [
+          {
+            "node": "AI Agent (Ollama)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent (Ollama)": {
+      "main": [
+        [
+          {
+            "node": "Extract AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract AI Response": {
+      "main": [
+        [
+          {
+            "node": "Send Response to Chatwoot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Response to Chatwoot": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

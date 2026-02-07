@@ -1,0 +1,363 @@
+{
+  "name": "Automotive Keys - Full Workflow con WhatsApp",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "chatwoot-webhook",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-chatwoot",
+      "name": "Chatwoot Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 500]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false
+          },
+          "conditions": [
+            {
+              "leftValue": "={{$json.body.message_type}}",
+              "rightValue": "incoming",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "leftValue": "={{$json.body.private}}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "filter-incoming",
+      "name": "Filter Incoming Messages",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [450, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Procesar datos del webhook\nconst webhookData = $input.item.json.body;\n\n// Limpiar contenido HTML\nconst cleanContent = webhookData.content\n  .replace(/<[^>]*>/g, '')\n  .replace(/\\n/g, ' ')\n  .trim();\n\n// Extraer atributos personalizados si existen\nconst customAttributes = webhookData.sender?.custom_attributes || {};\nconst contactPhone = customAttributes.phone_number || webhookData.sender?.phone_number || '';\nconst contactEmail = customAttributes.email || webhookData.sender?.email || '';\n\n// Obtener mensajes previos para contexto\nconst previousMessages = (webhookData.conversation?.messages || [])\n  .filter(msg => msg.message_type !== 3) // Excluir mensajes del sistema\n  .slice(-5) // Últimos 5 mensajes\n  .map(msg => `${msg.sender_type === 'contact' ? 'Cliente' : 'Asistente'}: ${msg.content.replace(/<[^>]*>/g, '').trim()}`)\n  .join('\\n');\n\nreturn {\n  // Datos del mensaje\n  conversationId: webhookData.conversation?.id,\n  messageId: webhookData.id,\n  content: cleanContent,\n  \n  // Datos del cliente\n  senderName: webhookData.sender?.name,\n  senderEmail: contactEmail,\n  senderPhone: contactPhone,\n  senderId: webhookData.sender?.id,\n  \n  // Datos de la conversación\n  inboxId: webhookData.inbox?.id,\n  accountId: webhookData.account?.id,\n  timestamp: webhookData.created_at,\n  \n  // Contexto\n  conversationContext: previousMessages,\n  hasPhone: !!contactPhone,\n  hasEmail: !!contactEmail,\n  isNewContact: !contactPhone && !contactEmail,\n  \n  // Metadata\n  browserInfo: webhookData.conversation?.additional_attributes?.browser || {}\n};"
+      },
+      "id": "process-data",
+      "name": "Process Message Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false
+          },
+          "conditions": [
+            {
+              "leftValue": "={{$json.isNewContact}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "check-contact-info",
+      "name": "Check Contact Info",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [850, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Solicitar datos de contacto\nconst content = $input.item.json.content.toLowerCase();\n\n// Detectar si el mensaje contiene información de contacto\nconst hasPhonePattern = /\\b\\d{10}\\b|\\b\\d{3}[-.]?\\d{3}[-.]?\\d{4}\\b/.test(content);\nconst hasEmailPattern = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}/.test(content);\nconst hasName = content.split(' ').length >= 2;\n\nif (hasPhonePattern || hasEmailPattern) {\n  // Extraer datos\n  const phoneMatch = content.match(/\\b\\d{10}\\b|\\b\\d{3}[-.]?\\d{3}[-.]?\\d{4}\\b/);\n  const emailMatch = content.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}/);\n  \n  return {\n    ...$input.item.json,\n    extractedPhone: phoneMatch ? phoneMatch[0] : '',\n    extractedEmail: emailMatch ? emailMatch[0] : '',\n    needsContactInfo: false,\n    shouldProceedToAI: true\n  };\n} else {\n  return {\n    ...$input.item.json,\n    needsContactInfo: true,\n    shouldProceedToAI: false,\n    requestMessage: '¡Hola! 👋 Gracias por contactarnos. Para brindarte un mejor servicio, ¿podrías compartirme tu nombre completo y número de WhatsApp o correo electrónico? Así podré enviarte información personalizada sobre nuestros servicios de programación de llaves.'\n  };\n}"
+      },
+      "id": "extract-contact-info",
+      "name": "Extract Contact Info",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://ollama-server:11434/api/generate",
+        "authentication": "none",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "llama3"
+            },
+            {
+              "name": "prompt",
+              "value": "=Eres un asistente experto en programación de llaves automotrices con 10 años de experiencia.\n\n📋 INFORMACIÓN DEL SERVICIO:\n• Programamos llaves para TODAS las marcas (Toyota, Honda, Ford, Chevrolet, Nissan, etc.)\n• Servicio a domicilio disponible en toda la ciudad\n• Tiempo promedio: 30-45 minutos\n• Garantía de 1 año en todos nuestros trabajos\n• Precios desde $150 USD (varía según marca y modelo)\n• Aceptamos efectivo, tarjeta y transferencias\n\n⏰ HORARIOS:\n• Lunes a Viernes: 8:00 AM - 8:00 PM\n• Sábados: 9:00 AM - 6:00 PM\n• Domingos: 10:00 AM - 4:00 PM\n• Emergencias 24/7 (con cargo adicional)\n\n💼 SERVICIOS DISPONIBLES:\n1. Programación de llaves nuevas\n2. Duplicado de llaves existentes\n3. Reemplazo de llaves perdidas\n4. Reparación de controles remotos\n5. Desbloqueo de vehículos\n6. Programación de transponders\n\n👤 DATOS DEL CLIENTE:\n- Nombre: {{$json.senderName}}\n{{#if $json.senderPhone}}- Teléfono: {{$json.senderPhone}}{{/if}}\n{{#if $json.senderEmail}}- Email: {{$json.senderEmail}}{{/if}}\n- Conversación ID: {{$json.conversationId}}\n\n💬 HISTORIAL DE CONVERSACIÓN:\n{{$json.conversationContext}}\n\n❓ PREGUNTA ACTUAL DEL CLIENTE:\n{{$json.content}}\n\n📝 INSTRUCCIONES PARA TU RESPUESTA:\n1. Sé amigable, profesional y conciso\n2. Usa emojis ocasionalmente para hacer la conversación más amigable\n3. Si el cliente pregunta por precios, menciona el rango y explica que depende del modelo\n4. Si quiere agendar, solicita: marca, modelo, año, dirección y horario preferido\n5. Si pregunta por una marca específica, confirma que sí trabajamos con esa marca\n6. Si menciona una emergencia, ofrece servicio 24/7\n7. Personaliza la respuesta usando su nombre si lo tienes\n8. Si ya tienes su WhatsApp, sugiere enviar fotos o más detalles por ese medio\n9. Siempre ofrece agendar una cita al final si aplica\n10. Mantén las respuestas en máximo 3-4 párrafos\n\nResponde en español de manera profesional y útil:"
+            },
+            {
+              "name": "stream",
+              "value": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ai-agent",
+      "name": "AI Agent (Ollama)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1050, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extraer respuesta del AI\nconst aiResponse = $input.item.json.response;\n\n// Pasar todos los datos necesarios\nreturn {\n  ...$input.item.json,\n  aiResponse: aiResponse,\n  finalMessage: aiResponse\n};"
+      },
+      "id": "extract-ai-response",
+      "name": "Extract AI Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1250, 500]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false
+          },
+          "conditions": [
+            {
+              "leftValue": "={{$json.content}}",
+              "rightValue": "whatsapp|wa|teléfono|telefono|número|numero",
+              "operator": {
+                "type": "string",
+                "operation": "regex"
+              }
+            },
+            {
+              "leftValue": "={{$json.hasPhone}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-whatsapp-request",
+      "name": "Check WhatsApp Request",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1450, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Crear mensaje con enlace de WhatsApp\nconst phone = $input.item.json.senderPhone.replace(/\\D/g, '');\nconst message = `\n${$input.item.json.aiResponse}\n\n📱 Para continuar la conversación por WhatsApp, haz click aquí:\nhttps://wa.me/${phone}\n\nTambién puedes escanear este código QR desde tu teléfono.\n`;\n\nreturn {\n  ...$input.item.json,\n  finalMessage: message,\n  whatsappLink: `https://wa.me/${phone}`,\n  sendWhatsAppQR: true\n};"
+      },
+      "id": "generate-whatsapp-link",
+      "name": "Generate WhatsApp Link",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1650, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://chatwoot:3000/api/v1/accounts/{{$json.accountId}}/conversations/{{$json.conversationId}}/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"content\": \"{{ $json.finalMessage }}\",\n  \"message_type\": \"outgoing\",\n  \"private\": false\n}",
+        "options": {}
+      },
+      "id": "send-to-chatwoot",
+      "name": "Send Response to Chatwoot",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1850, 500]
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=http://chatwoot:3000/api/v1/accounts/{{$json.accountId}}/contacts/{{$json.senderId}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"custom_attributes\": {\n    \"phone_number\": \"{{ $json.extractedPhone }}\",\n    \"email\": \"{{ $json.extractedEmail }}\",\n    \"last_interaction\": \"{{ $now.toISO() }}\"\n  }\n}",
+        "options": {}
+      },
+      "id": "update-contact-info",
+      "name": "Update Contact Info",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1250, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "options": {}
+      },
+      "id": "respond-webhook",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2050, 500]
+    }
+  ],
+  "connections": {
+    "Chatwoot Webhook": {
+      "main": [
+        [
+          {
+            "node": "Filter Incoming Messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Incoming Messages": {
+      "main": [
+        [
+          {
+            "node": "Process Message Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Message Data": {
+      "main": [
+        [
+          {
+            "node": "Check Contact Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Contact Info": {
+      "main": [
+        [
+          {
+            "node": "Extract Contact Info",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "AI Agent (Ollama)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Contact Info": {
+      "main": [
+        [
+          {
+            "node": "Update Contact Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent (Ollama)": {
+      "main": [
+        [
+          {
+            "node": "Extract AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract AI Response": {
+      "main": [
+        [
+          {
+            "node": "Check WhatsApp Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check WhatsApp Request": {
+      "main": [
+        [
+          {
+            "node": "Generate WhatsApp Link",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Response to Chatwoot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate WhatsApp Link": {
+      "main": [
+        [
+          {
+            "node": "Send Response to Chatwoot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Contact Info": {
+      "main": [
+        [
+          {
+            "node": "Send Response to Chatwoot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Response to Chatwoot": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

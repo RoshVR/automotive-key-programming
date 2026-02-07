@@ -1,0 +1,663 @@
+{
+  "name": "Automotive Keys - Chatwoot AI Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "automotive-keys-webhook",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        300
+      ],
+      "id": "webhook-input",
+      "name": "Input"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "incoming-check",
+              "leftValue": "={{ $json.body.message_type }}",
+              "rightValue": "incoming",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        460,
+        300
+      ],
+      "id": "check-incoming",
+      "name": "¿incoming?"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "data-attachment",
+              "name": "attachments",
+              "value": "={{ $json.body.attachments?.[0]?.file_type || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "data-url",
+              "name": "data_url",
+              "value": "={{ $json.body.attachments?.[0]?.data_url || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "data-text",
+              "name": "texto",
+              "value": "={{ $json.body.content }}",
+              "type": "string"
+            },
+            {
+              "id": "data-conv",
+              "name": "conversation_id",
+              "value": "={{ $json.body.conversation.messages[0].conversation_id }}",
+              "type": "string"
+            },
+            {
+              "id": "data-contact",
+              "name": "contact_id",
+              "value": "={{ $json.body.conversation.contact_inbox.contact_id }}",
+              "type": "string"
+            },
+            {
+              "id": "data-phone",
+              "name": "telefono_usuario",
+              "value": "={{ $json.body?.sender?.phone_number || $json.body?.sender?.email || 'unknown' }}",
+              "type": "string"
+            },
+            {
+              "id": "data-account",
+              "name": "account_id",
+              "value": "={{ $json.body.sender.account.id }}",
+              "type": "number"
+            },
+            {
+              "id": "data-chatwoot-url",
+              "name": "url_chatwoot",
+              "value": "http://chatwoot:3000/",
+              "type": "string"
+            },
+            {
+              "id": "data-chatwoot-api",
+              "name": "api_key_chatwoot",
+              "value": "TU_API_KEY_CHATWOOT",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        680,
+        300
+      ],
+      "id": "extract-data",
+      "name": "Datos"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.attachments }}",
+                    "rightValue": "audio",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "Audio"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.attachments }}",
+                    "rightValue": "image",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "Imagen"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.texto }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "string",
+                      "operation": "notEmpty"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "Texto"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        900,
+        300
+      ],
+      "id": "switch-type",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "operation": "push",
+        "list": "={{ $('Datos').item.json.telefono_usuario }}",
+        "messageData": "={{ $json.response }}",
+        "tail": true
+      },
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        1560,
+        180
+      ],
+      "id": "save-to-redis",
+      "name": "Guarda mensajes",
+      "credentials": {
+        "redis": {
+          "name": "N8N Workflow Redis",
+          "host": "n8n-redis",
+          "port": 6379,
+          "database": 0
+        }
+      }
+    },
+    {
+      "parameters": {
+        "amount": 30
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1780,
+        180
+      ],
+      "id": "wait-redis",
+      "name": "Wait"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "propertyName": "mensajes",
+        "key": "={{ $('Datos').first().json.telefono_usuario }}"
+      },
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        2000,
+        180
+      ],
+      "id": "get-from-redis",
+      "name": "Recupera mensajes",
+      "credentials": {
+        "redis": {
+          "name": "N8N Workflow Redis",
+          "host": "n8n-redis",
+          "port": 6379,
+          "database": 0
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "pack-messages",
+              "name": "mensaje_usuario",
+              "value": "={{ $json.mensajes.join('\\n') }}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2220,
+        180
+      ],
+      "id": "pack-messages",
+      "name": "Paquete de mensajes"
+    },
+    {
+      "parameters": {
+        "operation": "delete",
+        "key": "={{ $('Datos').first().json.telefono_usuario }}"
+      },
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        2440,
+        180
+      ],
+      "id": "delete-from-redis",
+      "name": "Borra mensajes de BD",
+      "credentials": {
+        "redis": {
+          "name": "N8N Workflow Redis",
+          "host": "n8n-redis",
+          "port": 6379,
+          "database": 0
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "name": "mensaje_usuario",
+              "value": "={{ $json.mensaje_usuario }}",
+              "type": "string"
+            },
+            {
+              "name": "telefono_usuario",
+              "value": "={{ $('Datos').first().json.telefono_usuario }}",
+              "type": "string"
+            },
+            {
+              "name": "conversation_id",
+              "value": "={{ $('Datos').first().json.conversation_id }}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2660,
+        180
+      ],
+      "id": "input-agent",
+      "name": "Input Agente"
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $json.telefono_usuario }}",
+        "contextWindowLength": 10
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
+      "typeVersion": 1.3,
+      "position": [
+        3100,
+        360
+      ],
+      "id": "postgres-memory",
+      "name": "Postgres Chat Memory",
+      "credentials": {
+        "postgres": {
+          "name": "N8N Workflow Postgres",
+          "host": "n8n-postgres",
+          "port": 5432,
+          "database": "n8n_workflow",
+          "user": "n8n_user",
+          "password": "TU_PASSWORD_AQUI",
+          "ssl": {
+            "ssl": "disable"
+          }
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Mensaje usuario: {{ $json.mensaje_usuario }}",
+        "options": {
+          "systemMessage": "Eres un asistente experto en programación de llaves automotrices y duplicados. Tu trabajo es ayudar a los clientes a resolver sus necesidades de llaves de auto, explicar servicios y agendar citas.\\n\\nTus servicios incluyen:\\n- Programación de llaves con chip\\n- Duplicado de llaves convencionales\\n- Programación de controles remotos\\n- Servicio a domicilio\\n- Atención 24/7 para emergencias\\n\\nResponde de forma clara, profesional y amigable. Si el cliente pregunta por precios o disponibilidad, ofrece información general y sugiere agendar una cita para una evaluación precisa."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        2880,
+        180
+      ],
+      "id": "ai-agent",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Datos').item.json.url_chatwoot }}api/v1/accounts/{{ $('Datos').item.json.account_id }}/conversations/{{ $('Input Agente').item.json.conversation_id }}/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "api_access_token",
+              "value": "={{ $('Datos').item.json.api_key_chatwoot }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\\n  \\\"content\\\": \\\"{{ $json.output }}\\\",\\n  \\\"message_type\\\": \\\"outgoing\\\",\\n  \\\"private\\\": false\\n}"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3320,
+        180
+      ],
+      "id": "send-response",
+      "name": "Enviar Respuesta"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "name": "response",
+              "value": "={{ $json.texto }}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1120,
+        300
+      ],
+      "id": "response-text",
+      "name": "response (Texto)"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "name": "response",
+              "value": "=Por favor envía una imagen válida. Los PDFs no están soportados en este momento.",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1120,
+        100
+      ],
+      "id": "response-audio-placeholder",
+      "name": "response (Audio - Whisper)"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "name": "response",
+              "value": "=Por favor envía una imagen válida.",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1120,
+        200
+      ],
+      "id": "response-image-placeholder",
+      "name": "response (Imagen - Vision)"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Input": {
+      "main": [
+        [
+          {
+            "node": "¿incoming?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿incoming?": {
+      "main": [
+        [
+          {
+            "node": "Datos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Datos": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "response (Audio - Whisper)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "response (Imagen - Vision)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "response (Texto)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "response (Texto)": {
+      "main": [
+        [
+          {
+            "node": "Guarda mensajes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "response (Audio - Whisper)": {
+      "main": [
+        [
+          {
+            "node": "Guarda mensajes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "response (Imagen - Vision)": {
+      "main": [
+        [
+          {
+            "node": "Guarda mensajes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guarda mensajes": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Recupera mensajes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recupera mensajes": {
+      "main": [
+        [
+          {
+            "node": "Paquete de mensajes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Paquete de mensajes": {
+      "main": [
+        [
+          {
+            "node": "Borra mensajes de BD",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Borra mensajes de BD": {
+      "main": [
+        [
+          {
+            "node": "Input Agente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Input Agente": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Enviar Respuesta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres Chat Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

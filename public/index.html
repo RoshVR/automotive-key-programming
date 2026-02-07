@@ -34,9 +34,9 @@
                     <li class="nav-item"><a class="nav-link" href="#testimonios">Testimonios</a></li>
                     <li class="nav-item"><a class="nav-link" href="#contacto">Contacto</a></li>
                     <li class="nav-item">
-                        <a class="btn btn-primary btn-sm ms-2" href="#" onclick="openChat(); return false;">
+                        <button class="btn btn-primary btn-sm ms-2" onclick="openChat();" type="button">
                             <i class="fas fa-comments me-1"></i> Chat
-                        </a>
+                        </button>
                     </li>
                 </ul>
             </div>
@@ -336,47 +336,6 @@
         </div>
     </section>
 
-    <!-- Chat Widget -->
-    <div id="chatWidget" class="chat-widget">
-        <div class="chat-header">
-            <div class="d-flex align-items-center">
-                <i class="fas fa-robot me-2"></i>
-                <div>
-                    <strong>Asistente Virtual</strong>
-                    <div class="small">En línea</div>
-                </div>
-            </div>
-            <button class="btn-close-chat" onclick="closeChat()">
-                <i class="fas fa-times"></i>
-            </button>
-        </div>
-        <div class="chat-messages" id="chatMessages">
-            <div class="message bot-message">
-                <div class="message-content">
-                    ¡Hola! 👋 Soy tu asistente virtual. ¿En qué puedo ayudarte hoy?
-                    <div class="quick-replies mt-2">
-                        <button class="btn btn-sm btn-outline-primary mb-1" onclick="sendQuickReply('precios')">Ver precios</button>
-                        <button class="btn btn-sm btn-outline-primary mb-1" onclick="sendQuickReply('agendar')">Agendar cita</button>
-                        <button class="btn btn-sm btn-outline-primary mb-1" onclick="sendQuickReply('marcas')">Marcas disponibles</button>
-                        <button class="btn btn-sm btn-outline-primary mb-1" onclick="sendQuickReply('humano')">Hablar con humano</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="chat-input">
-            <input type="text" id="chatInput" class="form-control" placeholder="Escribe tu mensaje...">
-            <button class="btn btn-primary" onclick="sendMessage()">
-                <i class="fas fa-paper-plane"></i>
-            </button>
-        </div>
-    </div>
-
-    <!-- Chat Button -->
-    <button class="chat-button" onclick="toggleChat()" id="chatButton">
-        <i class="fas fa-comments"></i>
-        <span class="chat-badge">1</span>
-    </button>
-
     <!-- Footer -->
     <footer class="bg-dark text-white text-center py-4">
         <div class="container">
@@ -390,5 +349,32 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <!-- Custom JS -->
     <script src="js/main.js"></script>
+
+    <!-- Chatwoot Widget -->
+    <script>
+        (function(d,t) {
+            var BASE_URL="http://localhost:8080/chatwoot";
+            var g=d.createElement(t),s=d.getElementsByTagName(t)[0];
+            g.src=BASE_URL+"/packs/js/sdk.js";
+            g.defer = true;
+            g.async = true;
+            s.parentNode.insertBefore(g,s);
+            g.onload=function(){
+                try {
+                    window.chatwootSDK.run({
+                        websiteToken: 'HAmvpPpwjSFYM18qXSv5Z6xN',
+                        baseUrl: BASE_URL
+                    });
+                    console.log('✅ Chatwoot SDK cargado correctamente');
+                } catch (e) {
+                    console.error('❌ Error al ejecutar Chatwoot SDK:', e);
+                }
+            };
+            g.onerror = function() {
+                console.error('❌ Error al cargar Chatwoot widget desde ' + BASE_URL);
+                console.log('Verifica que Chatwoot esté corriendo en http://localhost:3001');
+            };
+        })(document,"script");
+    </script>
 </body>
 </html>

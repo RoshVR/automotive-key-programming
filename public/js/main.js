@@ -13,16 +13,26 @@ function toggleChat() {
 }
 
 function openChat() {
-    const chatWidget = document.getElementById('chatWidget');
-    const chatBadge = document.querySelector('.chat-badge');
-    chatWidget.classList.add('active');
-    chatBadge.style.display = 'none';
-    chatOpen = true;
+    // Esperar a que window.$chatwoot esté disponible con todos los métodos
+    const tryOpen = function(attempts) {
+        if (attempts <= 0) {
+            console.error('No se pudo abrir el chat después de varios intentos');
+            // Hacer click en la burbuja como último recurso
+            const bubble = document.querySelector('.woot-widget-bubble');
+            if (bubble) bubble.click();
+            return;
+        }
+        
+        if (window.$chatwoot && typeof window.$chatwoot.toggle === 'function') {
+            window.$chatwoot.toggle('open');
+            console.log('✅ Chat abierto');
+        } else {
+            console.log('Esperando que $chatwoot esté listo... intentos restantes:', attempts);
+            setTimeout(() => tryOpen(attempts - 1), 300);
+        }
+    };
     
-    // Focus input
-    setTimeout(() => {
-        document.getElementById('chatInput').focus();
-    }, 300);
+    tryOpen(10); // 10 intentos = 3 segundos máximo
 }
 
 function closeChat() {
@@ -302,8 +312,16 @@ document.addEventListener('DOMContentLoaded', () => {
     // Smooth scroll for navigation links
     document.querySelectorAll('a[href^="#"]').forEach(anchor => {
         anchor.addEventListener('click', function (e) {
+            const href = this.getAttribute('href');
+            
+            // Ignorar enlaces vacíos o solo con #
+            if (!href || href === '#') {
+                e.preventDefault();
+                return;
+            }
+            
             e.preventDefault();
-            const target = document.querySelector(this.getAttribute('href'));
+            const target = document.querySelector(href);
             if (target) {
                 target.scrollIntoView({
                     behavior: 'smooth',
