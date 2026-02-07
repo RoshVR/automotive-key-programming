@@ -2,6 +2,27 @@
 
 Sistema completo de landing page con chat AI integrado para negocio de programación de llaves automotrices.
 
+## ⚡ Inicio rápido (Docker)
+
+```bash
+# 1) Copiar variables de entorno
+copy .env.example .env
+
+# 2) Editar .env (actualiza ngrok y claves)
+
+# 3) Levantar servicios
+docker compose up -d
+```
+
+Accesos por defecto:
+
+- Landing (Nginx): http://localhost:8080
+- App directa: http://localhost:3000
+- N8N: http://localhost:5678
+- Chatwoot: http://localhost:3001
+
+Guia completa: [STARTUP_GUIDE.md](STARTUP_GUIDE.md)
+
 ## 📋 Características
 
 - ✅ Landing page responsive con Bootstrap 5
@@ -37,6 +58,8 @@ psql --version
 # Git
 git --version
 ```
+
+Para despliegue con Docker: Docker Desktop instalado.
 
 ### 2. Clonar e instalar dependencias
 
@@ -82,6 +105,14 @@ CHATWOOT_INBOX_ID=tu_inbox_id
 
 # WhatsApp
 WHATSAPP_NUMBER=+1234567890
+```
+
+Si usas ngrok, actualiza tambien:
+
+```env
+N8N_HOST=tu-subdominio.ngrok-free.app
+N8N_WEBHOOK_URL=https://tu-subdominio.ngrok-free.app/webhook/chat
+N8N_APPOINTMENT_WEBHOOK=https://tu-subdominio.ngrok-free.app/webhook/appointment
 ```
 
 ### 4. Crear base de datos
@@ -182,6 +213,8 @@ Crear un workflow en N8N con los siguientes nodos:
 docker-compose up -d
 ```
 
+Nota: En este repo el widget se carga via Nginx con subruta `http://localhost:8080/chatwoot` (ver [public/index.html](public/index.html)).
+
 ### 2. Configurar Inbox
 
 1. Ir a Settings → Inboxes → Add Inbox
@@ -228,6 +261,24 @@ Body:
 1. Configurar inbox de WhatsApp en Chatwoot
 2. Conectar con 360Dialog o Twilio
 3. Las conversaciones se manejan automáticamente
+
+## 🛠️ Troubleshooting
+
+- **Chatwoot no carga (ERR_CONNECTION_REFUSED):**
+   - Verifica que Chatwoot este arriba: http://localhost:3001
+   - Si usas Nginx, valida el SDK: http://localhost:8080/chatwoot/packs/js/sdk.js
+- **Nginx no inicia por puerto 80/443:**
+   - Este repo usa 8080/8443 (ver `docker-compose.yml`).
+- **Chatwoot reiniciando en loop:**
+   - Borra contenedor y recrea:
+      ```bash
+      docker compose stop chatwoot chatwoot-sidekiq
+      docker compose rm -f chatwoot chatwoot-sidekiq
+      docker compose up -d chatwoot chatwoot-sidekiq
+      ```
+- **N8N no recibe webhooks:**
+   - Actualiza `N8N_HOST`, `N8N_WEBHOOK_URL`, `N8N_APPOINTMENT_WEBHOOK` en `.env`.
+   - Actualiza el webhook en Chatwoot cuando cambie ngrok.
 
 ## 🗄️ Estructura de Base de Datos
 
