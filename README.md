@@ -280,6 +280,62 @@ Body:
    - Actualiza `N8N_HOST`, `N8N_WEBHOOK_URL`, `N8N_APPOINTMENT_WEBHOOK` en `.env`.
    - Actualiza el webhook en Chatwoot cuando cambie ngrok.
 
+## ✅ Implementacion rapida (paso a paso)
+
+1) **Clonar y preparar**
+
+```bash
+git clone <URL_DEL_REPO>
+cd ADC
+copy .env.example .env
+```
+
+2) **Completar .env**
+
+- Ajusta credenciales y claves.
+- Si usas ngrok, actualiza:
+   - `N8N_HOST`
+   - `N8N_WEBHOOK_URL`
+   - `N8N_APPOINTMENT_WEBHOOK`
+
+3) **Restaurar archivos locales (no versionados)**
+
+- `.env` (ya creado en el paso 1)
+- `ssl/` (certificados si usas HTTPS local)
+- `ngrok/` (binario/config si lo necesitas local)
+- `.agents/` y `.claude/` (skills locales si aplican)
+
+4) **Levantar servicios**
+
+```bash
+docker compose up -d
+```
+
+5) **Validar accesos**
+
+- Landing: http://localhost:8080
+- App directa: http://localhost:3000
+- N8N: http://localhost:5678
+- Chatwoot: http://localhost:3001
+
+6) **Actualizar webhook en Chatwoot**
+
+Cuando cambia la URL de ngrok:
+
+1. Entra a Chatwoot: http://localhost:3001
+2. Ve a **Settings -> Webhooks**
+3. Actualiza la URL (ejemplo):
+
+```
+https://tu-subdominio.ngrok-free.app/webhook/chat
+```
+
+7) **Migraciones (solo si es necesario)**
+
+```bash
+docker compose exec app npm run migrate
+```
+
 ## 🗄️ Estructura de Base de Datos
 
 ### Tabla: appointments
