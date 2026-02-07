@@ -336,6 +336,16 @@ https://tu-subdominio.ngrok-free.app/webhook/chat
 docker compose exec app npm run migrate
 ```
 
+## ✅ Checklist de despliegue rapido
+
+- [ ] Docker Desktop instalado y corriendo
+- [ ] `.env` creado desde `.env.example`
+- [ ] Ngrok activo y URLs actualizadas en `.env`
+- [ ] Webhook actualizado en Chatwoot (Settings -> Webhooks)
+- [ ] Contenedores arriba: `docker compose up -d`
+- [ ] Landing responde en http://localhost:8080
+- [ ] Chatwoot responde en http://localhost:3001
+
 ## 🗄️ Estructura de Base de Datos
 
 ### Tabla: appointments
